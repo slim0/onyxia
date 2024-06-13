@@ -44,11 +44,6 @@ export default function Register(props: RegisterProps) {
 
     const [isFormSubmittable, setIsFormSubmittable] = useState(false);
 
-    const getIncrementedTabIndex = (() => {
-        let counter = 1;
-        return () => counter++;
-    })();
-
     return (
         <Template
             {...{ kcContext, i18n, doUseDefaultCss }}
@@ -79,7 +74,8 @@ export default function Register(props: RegisterProps) {
                 <div className={classes.buttonsWrapper}>
                     <Button
                         variant="secondary"
-                        onClick={() => global.history.back()}
+                        href={url.loginUrl}
+                        doOpenNewTabIfHref={false}
                         tabIndex={-1}
                     >
                         {msg("go back")}
@@ -90,7 +86,6 @@ export default function Register(props: RegisterProps) {
                                 className={classes.buttonSubmit}
                                 disabled={!isFormSubmittable}
                                 type="submit"
-                                tabIndex={getIncrementedTabIndex()}
                             >
                                 {msgStr("doRegister")}
                             </Button>

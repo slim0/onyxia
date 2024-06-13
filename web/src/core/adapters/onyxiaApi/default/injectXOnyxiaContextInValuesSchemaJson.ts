@@ -87,78 +87,9 @@ function injectXOnyxiaContextInValuesSchemaJsonRec(params: {
             break overwrite_default;
         }
 
-        const resolveOverwriteDefaultWith = (params: {
-            overwriteDefaultWith: unknown;
-            isRoot: boolean;
-        }): unknown => {
-            const { overwriteDefaultWith, isRoot } = params;
-
-            if (typeof overwriteDefaultWith === "string") {
-                full_substitution: {
-                    const match = overwriteDefaultWith.match(/^{{([^}]+)}}$/);
-
-                    if (match === null) {
-                        break full_substitution;
-                    }
-
-                    return getValueAtPathInObject({
-                        "path": match[1].split("."),
-                        "obj": xOnyxiaContext
-                    });
-                }
-
-                string_substitution: {
-                    if (!overwriteDefaultWith.includes("{{")) {
-                        break string_substitution;
-                    }
-
-                    return Mustache.render(
-                        overwriteDefaultWith.replace(/{{/g, "{{{").replace(/}}/g, "}}}"),
-                        xOnyxiaContext
-                    );
-                }
-
-                implicit_reference: {
-                    if (!isRoot) {
-                        break implicit_reference;
-                    }
-
-                    return resolveOverwriteDefaultWith({
-                        "overwriteDefaultWith": `{{${overwriteDefaultWith}}}`,
-                        isRoot
-                    });
-                }
-
-                return overwriteDefaultWith;
-            }
-
-            if (overwriteDefaultWith instanceof Array) {
-                return overwriteDefaultWith.map(entry =>
-                    resolveOverwriteDefaultWith({
-                        "overwriteDefaultWith": entry,
-                        "isRoot": false
-                    })
-                );
-            }
-
-            if (overwriteDefaultWith instanceof Object) {
-                return Object.fromEntries(
-                    Object.entries(overwriteDefaultWith).map(([key, value]) => [
-                        key,
-                        resolveOverwriteDefaultWith({
-                            "overwriteDefaultWith": value,
-                            "isRoot": false
-                        })
-                    ])
-                );
-            }
-
-            return overwriteDefaultWith;
-        };
-
-        const resolvedValue = resolveOverwriteDefaultWith({
-            overwriteDefaultWith,
-            "isRoot": true
+        const resolvedValue = resolveXOnyxiaValueReference({
+            xOnyxiaContext,
+            "expression": overwriteDefaultWith
         });
 
         if (resolvedValue === undefined || resolvedValue === null) {
@@ -255,6 +186,33 @@ function injectXOnyxiaContextInValuesSchemaJsonRec(params: {
         }
     }
 
+    overwrite_list_enum: {
+        const { overwriteListEnumWith } =
+            jsonSchemaFormFieldDescription["x-onyxia"] ?? {};
+
+        if (overwriteListEnumWith === undefined) {
+            break overwrite_list_enum;
+        }
+
+        const resolvedValue = resolveXOnyxiaValueReference({
+            xOnyxiaContext,
+            "expression": overwriteListEnumWith
+        });
+
+        if (resolvedValue === undefined || resolvedValue === null) {
+            break overwrite_list_enum;
+        }
+
+        if (!(resolvedValue instanceof Array)) {
+            console.warn(
+                `${JSON.stringify(overwriteListEnumWith)} is not an array (${path})`
+            );
+            break overwrite_list_enum;
+        }
+
+        jsonSchemaFormFieldDescription.listEnum = resolvedValue;
+    }
+
     use_region_slider_config: {
         if (
             !(
@@ -310,3 +268,96 @@ function injectXOnyxiaContextInValuesSchemaJsonRec(params: {
         }
     }
 }
+
+const { resolveXOnyxiaValueReference } = (() => {
+    type Params = {
+        expression: unknown;
+        xOnyxiaContext: XOnyxiaContext;
+    };
+
+    function resolveXOnyxiaValueReference_rec(
+        params: Params & { isRoot: boolean }
+    ): unknown {
+        const { isRoot, expression: expression_unknown, xOnyxiaContext } = params;
+
+        if (typeof expression_unknown === "string") {
+            const expression_str = !isRoot
+                ? expression_unknown
+                : expression_unknown.replace(/\[(\d+)\]/g, ".$1"); // convert 'a.b[0].c' to 'a.b.0.c'
+
+            full_substitution: {
+                const match = expression_str.match(/^{{([^}]+)}}$/);
+
+                if (match === null) {
+                    break full_substitution;
+                }
+
+                return getValueAtPathInObject({
+                    "path": match[1].split("."),
+                    "obj": xOnyxiaContext
+                });
+            }
+
+            string_substitution: {
+                if (!expression_str.includes("{{")) {
+                    break string_substitution;
+                }
+
+                return Mustache.render(
+                    expression_str.replace(/{{/g, "{{{").replace(/}}/g, "}}}"),
+                    xOnyxiaContext
+                );
+            }
+
+            implicit_reference: {
+                if (!isRoot) {
+                    break implicit_reference;
+                }
+
+                return resolveXOnyxiaValueReference_rec({
+                    "expression": `{{${expression_str}}}`,
+                    xOnyxiaContext,
+                    "isRoot": true
+                });
+            }
+
+            return expression_str;
+        }
+
+        if (expression_unknown instanceof Array) {
+            return expression_unknown.map(entry =>
+                resolveXOnyxiaValueReference_rec({
+                    "expression": entry,
+                    "isRoot": false,
+                    xOnyxiaContext
+                })
+            );
+        }
+
+        if (expression_unknown instanceof Object) {
+            return Object.fromEntries(
+                Object.entries(expression_unknown).map(([key, value]) => [
+                    key,
+                    resolveXOnyxiaValueReference_rec({
+                        "expression": value,
+                        "isRoot": false,
+                        xOnyxiaContext
+                    })
+                ])
+            );
+        }
+
+        return expression_unknown;
+    }
+
+    function resolveXOnyxiaValueReference(params: Params): unknown {
+        const { expression, xOnyxiaContext } = params;
+        return resolveXOnyxiaValueReference_rec({
+            expression,
+            xOnyxiaContext,
+            "isRoot": true
+        });
+    }
+
+    return { resolveXOnyxiaValueReference };
+})();
